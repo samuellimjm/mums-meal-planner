@@ -1,0 +1,14 @@
+{
+  "name": "Mum's Meal Planner",
+  "short_name": "Meal Planner",
+  "description": "14-day high protein, low calorie meal plan for 2",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdfaf5",
+  "theme_color": "#2c2420",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

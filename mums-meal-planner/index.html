@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="theme-color" content="#2c2420"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Meal Planner"/>
+  <meta name="description" content="14-day high protein low calorie meal plan"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="apple-touch-icon" href="/icons/icon-192.png"/>
+  <title>Mum's Meal Planner</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { min-height: 100%; background: #fdfaf5; }
+    body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+    #loading { display:flex; align-items:center; justify-content:center; min-height:100vh;
+      font-family:Georgia,serif; font-size:18px; color:#6b5a4e; background:#fdfaf5; }
+  </style>
+</head>
+<body>
+  <div id="root"><div id="loading">Loading your meal plan…</div></div>
+
+  <!-- React + Babel from CDN -->
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ── STORAGE (localStorage for standalone PWA) ──────────────────────────
+    const STORAGE_KEY = "mums-meals-v3";
+    function loadState() {
+      try { const v = localStorage.getItem(STORAGE_KEY); return v ? JSON.parse(v) : null; }
+      catch(_) { return null; }
+    }
+    function saveState(state) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(_) {}
+    }
+
+    // ── SEED DATA ──────────────────────────────────────────────────────────
+    const SEED_MEALS = [
+      { id:"d1-b",  day:1,  type:"breakfast", name:"Greek Yogurt Parfait",                    cuisine:"western", calories:320, protein:28, servings:2, cooked:false, ingredients:[{name:"Greek yogurt (0% fat)",amount:400,unit:"g"},{name:"Mixed berries",amount:150,unit:"g"},{name:"Granola (low sugar)",amount:60,unit:"g"},{name:"Honey",amount:10,unit:"ml"},{name:"Chia seeds",amount:10,unit:"g"}], instructions:"Layer yogurt, berries, and granola. Drizzle honey and sprinkle chia seeds." },
+      { id:"d1-l",  day:1,  type:"lunch",     name:"Vietnamese Pho Bo",                       cuisine:"asian",   calories:380, protein:35, servings:2, cooked:false, ingredients:[{name:"Beef sirloin, thinly sliced",amount:300,unit:"g"},{name:"Rice noodles",amount:200,unit:"g"},{name:"Beef broth (low sodium)",amount:1200,unit:"ml"},{name:"Bean sprouts",amount:100,unit:"g"},{name:"Fresh basil",amount:20,unit:"g"},{name:"Lime",amount:1,unit:"whole"},{name:"Star anise",amount:3,unit:"whole"},{name:"Ginger",amount:30,unit:"g"},{name:"Spring onions",amount:30,unit:"g"}], instructions:"Simmer broth with star anise and ginger 20 min. Cook noodles. Assemble bowls with noodles, raw beef (broth cooks it), garnish with sprouts, basil, lime." },
+      { id:"d1-d",  day:1,  type:"dinner",    name:"Lemon Herb Baked Salmon",                 cuisine:"western", calories:420, protein:42, servings:2, cooked:false, ingredients:[{name:"Salmon fillets",amount:400,unit:"g"},{name:"Lemon",amount:1,unit:"whole"},{name:"Garlic cloves",amount:3,unit:"whole"},{name:"Fresh dill",amount:15,unit:"g"},{name:"Olive oil",amount:15,unit:"ml"},{name:"Steamed broccoli",amount:300,unit:"g"}], instructions:"Marinate salmon with lemon, garlic, dill, olive oil 15 min. Bake at 200°C for 15 min. Serve with steamed broccoli." },
+      { id:"d2-b",  day:2,  type:"breakfast", name:"Japanese Tamagoyaki",                     cuisine:"asian",   calories:280, protein:24, servings:2, cooked:false, ingredients:[{name:"Eggs",amount:6,unit:"whole"},{name:"Soy sauce (low sodium)",amount:15,unit:"ml"},{name:"Mirin",amount:10,unit:"ml"},{name:"Sugar",amount:5,unit:"g"},{name:"Sesame oil",amount:5,unit:"ml"},{name:"Spring onions",amount:20,unit:"g"}], instructions:"Whisk eggs with soy, mirin, sugar. Cook in thin layers in a pan, rolling each layer. Slice and serve with spring onions." },
+      { id:"d2-l",  day:2,  type:"lunch",     name:"Turkey & Avocado Wrap",                   cuisine:"western", calories:360, protein:32, servings:2, cooked:false, ingredients:[{name:"Wholegrain tortilla wraps",amount:2,unit:"whole"},{name:"Sliced turkey breast",amount:250,unit:"g"},{name:"Avocado",amount:1,unit:"whole"},{name:"Romaine lettuce",amount:80,unit:"g"},{name:"Cherry tomatoes",amount:100,unit:"g"},{name:"Dijon mustard",amount:15,unit:"ml"},{name:"Lemon juice",amount:10,unit:"ml"}], instructions:"Mash avocado with lemon. Spread mustard on wrap, layer turkey, lettuce, tomatoes, avocado. Roll tightly." },
+      { id:"d2-d",  day:2,  type:"dinner",    name:"Korean Sundubu Jjigae",                   cuisine:"asian",   calories:340, protein:30, servings:2, cooked:false, ingredients:[{name:"Soft tofu",amount:400,unit:"g"},{name:"Prawns",amount:200,unit:"g"},{name:"Gochugaru",amount:15,unit:"g"},{name:"Garlic cloves",amount:4,unit:"whole"},{name:"Anchovy stock",amount:500,unit:"ml"},{name:"Egg",amount:2,unit:"whole"},{name:"Sesame oil",amount:10,unit:"ml"},{name:"Spring onions",amount:30,unit:"g"}], instructions:"Sauté garlic and gochugaru in sesame oil. Add stock, bring to boil. Add tofu in chunks, prawns. Crack egg in last 2 min. Garnish with spring onions." },
+      { id:"d3-b",  day:3,  type:"breakfast", name:"High-Protein Smoothie Bowl",              cuisine:"western", calories:310, protein:30, servings:2, cooked:false, ingredients:[{name:"Protein powder (vanilla)",amount:60,unit:"g"},{name:"Frozen banana",amount:200,unit:"g"},{name:"Almond milk",amount:200,unit:"ml"},{name:"Peanut butter (natural)",amount:30,unit:"g"},{name:"Sliced banana (topping)",amount:100,unit:"g"},{name:"Hemp seeds",amount:20,unit:"g"}], instructions:"Blend protein powder, frozen banana, almond milk, peanut butter until thick. Pour into bowls, top with fresh fruit and hemp seeds." },
+      { id:"d3-l",  day:3,  type:"lunch",     name:"Thai Larb Gai",                           cuisine:"asian",   calories:350, protein:36, servings:2, cooked:false, ingredients:[{name:"Minced chicken breast",amount:400,unit:"g"},{name:"Fish sauce",amount:30,unit:"ml"},{name:"Lime juice",amount:30,unit:"ml"},{name:"Shallots",amount:60,unit:"g"},{name:"Fresh mint",amount:20,unit:"g"},{name:"Fresh coriander",amount:20,unit:"g"},{name:"Toasted rice powder",amount:15,unit:"g"},{name:"Dried chili flakes",amount:5,unit:"g"},{name:"Butter lettuce leaves",amount:100,unit:"g"}], instructions:"Cook chicken in pan until done. Mix with fish sauce, lime, shallots, herbs, rice powder. Serve in lettuce cups." },
+      { id:"d3-d",  day:3,  type:"dinner",    name:"Chicken Piccata with Zucchini Noodles",   cuisine:"western", calories:390, protein:44, servings:2, cooked:false, ingredients:[{name:"Chicken breasts",amount:400,unit:"g"},{name:"Capers",amount:30,unit:"g"},{name:"Lemon juice",amount:45,unit:"ml"},{name:"Chicken broth (low sodium)",amount:150,unit:"ml"},{name:"Garlic cloves",amount:3,unit:"whole"},{name:"Zucchini (spiralized)",amount:400,unit:"g"},{name:"Olive oil",amount:15,unit:"ml"}], instructions:"Pound chicken thin, pan-fry until golden. Make sauce with broth, lemon, capers, garlic. Sauté zucchini noodles briefly. Serve chicken on zucchini with sauce." },
+      { id:"d4-b",  day:4,  type:"breakfast", name:"Chinese Congee with Lean Pork",           cuisine:"asian",   calories:290, protein:26, servings:2, cooked:false, ingredients:[{name:"Jasmine rice",amount:100,unit:"g"},{name:"Minced lean pork",amount:200,unit:"g"},{name:"Chicken broth (low sodium)",amount:1000,unit:"ml"},{name:"Ginger",amount:20,unit:"g"},{name:"Sesame oil",amount:5,unit:"ml"},{name:"Spring onions",amount:30,unit:"g"}], instructions:"Simmer rice in broth with ginger until thick (30 min). Stir in seasoned pork in last 10 min. Top with sesame oil and spring onions." },
+      { id:"d4-l",  day:4,  type:"lunch",     name:"Tuna Niçoise Salad",                      cuisine:"western", calories:370, protein:38, servings:2, cooked:false, ingredients:[{name:"Canned tuna in water",amount:300,unit:"g"},{name:"Green beans",amount:150,unit:"g"},{name:"Cherry tomatoes",amount:150,unit:"g"},{name:"Eggs (hard boiled)",amount:4,unit:"whole"},{name:"Kalamata olives",amount:50,unit:"g"},{name:"Mixed salad leaves",amount:100,unit:"g"},{name:"Dijon mustard",amount:10,unit:"g"},{name:"Olive oil",amount:20,unit:"ml"}], instructions:"Blanch green beans. Arrange all ingredients on a platter. Whisk mustard, vinegar, olive oil for dressing." },
+      { id:"d4-d",  day:4,  type:"dinner",    name:"Mapo Tofu (Lighter Version)",             cuisine:"asian",   calories:360, protein:32, servings:2, cooked:false, ingredients:[{name:"Firm tofu",amount:400,unit:"g"},{name:"Lean minced pork",amount:150,unit:"g"},{name:"Doubanjiang (chili bean paste)",amount:30,unit:"g"},{name:"Garlic cloves",amount:4,unit:"whole"},{name:"Ginger",amount:15,unit:"g"},{name:"Chicken broth",amount:200,unit:"ml"},{name:"Sichuan peppercorn",amount:3,unit:"g"},{name:"Cornstarch",amount:10,unit:"g"},{name:"Spring onions",amount:30,unit:"g"}], instructions:"Fry pork until cooked. Add doubanjiang, garlic, ginger. Add broth, tofu cubes. Thicken with cornstarch slurry. Garnish with spring onions and Sichuan pepper." },
+      { id:"d5-b",  day:5,  type:"breakfast", name:"Smoked Salmon Egg White Omelette",        cuisine:"western", calories:270, protein:32, servings:2, cooked:false, ingredients:[{name:"Egg whites",amount:8,unit:"whole"},{name:"Smoked salmon",amount:100,unit:"g"},{name:"Cream cheese (light)",amount:40,unit:"g"},{name:"Capers",amount:15,unit:"g"},{name:"Dill",amount:10,unit:"g"},{name:"Spinach",amount:60,unit:"g"}], instructions:"Whisk egg whites, pour into non-stick pan. Add salmon, cream cheese, capers, spinach, dill to one half. Fold and cook 2 min more." },
+      { id:"d5-l",  day:5,  type:"lunch",     name:"Singapore Chicken Rice (Lean)",           cuisine:"asian",   calories:420, protein:38, servings:2, cooked:false, ingredients:[{name:"Chicken breast (poached)",amount:400,unit:"g"},{name:"Jasmine rice",amount:200,unit:"g"},{name:"Ginger",amount:30,unit:"g"},{name:"Garlic cloves",amount:4,unit:"whole"},{name:"Sesame oil",amount:10,unit:"ml"},{name:"Soy sauce (low sodium)",amount:20,unit:"ml"},{name:"Cucumber",amount:150,unit:"g"},{name:"Spring onions",amount:30,unit:"g"},{name:"Chicken broth",amount:400,unit:"ml"}], instructions:"Poach chicken in broth with ginger and garlic. Cook rice in remaining broth. Slice chicken, serve over rice with cucumber, drizzle sesame oil and soy." },
+      { id:"d5-d",  day:5,  type:"dinner",    name:"Turkey Meatballs in Tomato Sauce",        cuisine:"western", calories:380, protein:40, servings:2, cooked:false, ingredients:[{name:"Minced turkey breast",amount:400,unit:"g"},{name:"Canned crushed tomatoes",amount:400,unit:"g"},{name:"Garlic cloves",amount:4,unit:"whole"},{name:"Egg",amount:1,unit:"whole"},{name:"Parmesan (grated)",amount:30,unit:"g"},{name:"Oregano",amount:5,unit:"g"},{name:"Basil leaves",amount:20,unit:"g"},{name:"Zucchini (spiralized)",amount:300,unit:"g"}], instructions:"Mix turkey, egg, parmesan, oregano. Form meatballs, bake 15 min at 200°C. Simmer tomatoes with garlic and basil. Combine with meatballs, serve over zucchini noodles." },
+      { id:"d6-b",  day:6,  type:"breakfast", name:"Miso Soup with Silken Tofu & Egg",        cuisine:"asian",   calories:240, protein:22, servings:2, cooked:false, ingredients:[{name:"White miso paste",amount:40,unit:"g"},{name:"Silken tofu",amount:300,unit:"g"},{name:"Eggs (poached)",amount:2,unit:"whole"},{name:"Dashi stock",amount:800,unit:"ml"},{name:"Wakame seaweed (dried)",amount:10,unit:"g"},{name:"Spring onions",amount:20,unit:"g"},{name:"Rye crispbreads",amount:4,unit:"whole"}], instructions:"Heat dashi, dissolve miso. Add tofu and wakame. Poach eggs separately. Serve soup with poached egg on top and crispbreads on side." },
+      { id:"d6-l",  day:6,  type:"lunch",     name:"Chicken & Quinoa Power Bowl",             cuisine:"western", calories:410, protein:42, servings:2, cooked:false, ingredients:[{name:"Chicken breast (grilled)",amount:300,unit:"g"},{name:"Quinoa (cooked)",amount:200,unit:"g"},{name:"Roasted sweet potato",amount:200,unit:"g"},{name:"Kale",amount:100,unit:"g"},{name:"Chickpeas (canned)",amount:150,unit:"g"},{name:"Tahini",amount:30,unit:"g"},{name:"Lemon juice",amount:20,unit:"ml"}], instructions:"Assemble quinoa in bowls. Top with grilled chicken, roasted sweet potato, massaged kale, chickpeas. Drizzle tahini-lemon dressing." },
+      { id:"d6-d",  day:6,  type:"dinner",    name:"Vietnamese Lemongrass Prawn Stir-fry",    cuisine:"asian",   calories:340, protein:36, servings:2, cooked:false, ingredients:[{name:"Prawns (peeled)",amount:400,unit:"g"},{name:"Lemongrass stalks",amount:2,unit:"whole"},{name:"Garlic cloves",amount:4,unit:"whole"},{name:"Chili",amount:2,unit:"whole"},{name:"Fish sauce",amount:20,unit:"ml"},{name:"Mixed bell peppers",amount:250,unit:"g"},{name:"Cauliflower rice",amount:300,unit:"g"},{name:"Coriander",amount:15,unit:"g"}], instructions:"Stir-fry lemongrass, garlic, chili. Add prawns until pink. Add peppers and sauces. Serve over cauliflower rice with fresh coriander." },
+      { id:"d7-b",  day:7,  type:"breakfast", name:"Shakshuka",                               cuisine:"western", calories:310, protein:22, servings:2, cooked:false, ingredients:[{name:"Eggs",amount:4,unit:"whole"},{name:"Canned chopped tomatoes",amount:400,unit:"g"},{name:"Red bell pepper",amount:150,unit:"g"},{name:"Onion",amount:100,unit:"g"},{name:"Garlic cloves",amount:3,unit:"whole"},{name:"Cumin",amount:5,unit:"g"},{name:"Paprika",amount:5,unit:"g"},{name:"Feta cheese (light)",amount:40,unit:"g"},{name:"Wholegrain bread",amount:2,unit:"slice"}], instructions:"Sauté onion, pepper, garlic. Add tomatoes, cumin, paprika. Simmer 10 min. Make wells, crack in eggs. Cover until eggs set. Top with feta." },
+      { id:"d7-l",  day:7,  type:"lunch",     name:"Korean Bibimbap (Light)",                 cuisine:"asian",   calories:420, protein:34, servings:2, cooked:false, ingredients:[{name:"Brown rice (cooked)",amount:300,unit:"g"},{name:"Lean beef mince",amount:200,unit:"g"},{name:"Spinach (blanched)",amount:150,unit:"g"},{name:"Carrots (julienned)",amount:100,unit:"g"},{name:"Zucchini (julienned)",amount:100,unit:"g"},{name:"Egg",amount:2,unit:"whole"},{name:"Gochujang",amount:20,unit:"g"},{name:"Sesame oil",amount:10,unit:"ml"}], instructions:"Season beef with soy and cook. Sauté each vegetable separately with sesame oil. Assemble rice bowl with all toppings, fried egg on top, gochujang on side." },
+      { id:"d7-d",  day:7,  type:"dinner",    name:"Grilled Chicken with Greek Salad",        cuisine:"western", calories:390, protein:45, servings:2, cooked:false, ingredients:[{name:"Chicken breasts",amount:400,unit:"g"},{name:"Cucumber",amount:200,unit:"g"},{name:"Cherry tomatoes",amount:200,unit:"g"},{name:"Red onion",amount:80,unit:"g"},{name:"Kalamata olives",amount:60,unit:"g"},{name:"Feta cheese (light)",amount:60,unit:"g"},{name:"Olive oil",amount:20,unit:"ml"},{name:"Dried oregano",amount:5,unit:"g"}], instructions:"Marinate chicken in olive oil, oregano, lemon. Grill 6-7 min each side. Chop salad vegetables, mix with olives, feta. Dress with olive oil and lemon." },
+      { id:"d8-b",  day:8,  type:"breakfast", name:"Korean Soft Tofu Scramble",               cuisine:"asian",   calories:260, protein:24, servings:2, cooked:false, ingredients:[{name:"Firm tofu",amount:300,unit:"g"},{name:"Eggs",amount:4,unit:"whole"},{name:"Gochugaru",amount:5,unit:"g"},{name:"Garlic clove",amount:2,unit:"whole"},{name:"Sesame oil",amount:5,unit:"ml"},{name:"Soy sauce (low sodium)",amount:10,unit:"ml"},{name:"Spring onions",amount:20,unit:"g"}], instructions:"Crumble tofu in pan, cook until water evaporates. Add garlic, gochugaru, push to side, scramble eggs. Combine, season with soy and sesame oil." },
+      { id:"d8-l",  day:8,  type:"lunch",     name:"Prawn & Mango Salad",                     cuisine:"western", calories:320, protein:30, servings:2, cooked:false, ingredients:[{name:"Cooked prawns",amount:300,unit:"g"},{name:"Mango",amount:200,unit:"g"},{name:"Rocket leaves",amount:80,unit:"g"},{name:"Avocado",amount:1,unit:"whole"},{name:"Red onion",amount:60,unit:"g"},{name:"Lime juice",amount:30,unit:"ml"},{name:"Chili flakes",amount:3,unit:"g"},{name:"Mint leaves",amount:15,unit:"g"}], instructions:"Toss all ingredients gently. Dress with lime juice and chili flakes. Serve immediately." },
+      { id:"d8-d",  day:8,  type:"dinner",    name:"Japanese Ginger Pork (Shogayaki)",        cuisine:"asian",   calories:400, protein:38, servings:2, cooked:false, ingredients:[{name:"Pork loin (thinly sliced)",amount:350,unit:"g"},{name:"Ginger (freshly grated)",amount:30,unit:"g"},{name:"Soy sauce (low sodium)",amount:30,unit:"ml"},{name:"Mirin",amount:20,unit:"ml"},{name:"Sake",amount:20,unit:"ml"},{name:"Cabbage (shredded)",amount:200,unit:"g"},{name:"Steamed broccoli",amount:200,unit:"g"}], instructions:"Mix soy, mirin, sake, ginger for marinade. Marinate pork 15 min. Sear in hot pan 2-3 min. Serve with shredded cabbage and steamed broccoli." },
+      { id:"d9-b",  day:9,  type:"breakfast", name:"Cottage Cheese & Berry Pancakes",         cuisine:"western", calories:330, protein:28, servings:2, cooked:false, ingredients:[{name:"Cottage cheese (low fat)",amount:250,unit:"g"},{name:"Eggs",amount:4,unit:"whole"},{name:"Rolled oats",amount:80,unit:"g"},{name:"Mixed berries",amount:150,unit:"g"},{name:"Vanilla extract",amount:3,unit:"ml"},{name:"Baking powder",amount:3,unit:"g"}], instructions:"Blend cottage cheese, eggs, oats, vanilla, baking powder until smooth. Cook small pancakes on medium heat 2-3 min per side. Serve with berries." },
+      { id:"d9-l",  day:9,  type:"lunch",     name:"Taiwanese Oyster Mushroom & Chicken Bowl",cuisine:"asian",   calories:370, protein:35, servings:2, cooked:false, ingredients:[{name:"Chicken thigh (skinless)",amount:300,unit:"g"},{name:"Oyster mushrooms",amount:200,unit:"g"},{name:"Brown rice (cooked)",amount:200,unit:"g"},{name:"Soy sauce (low sodium)",amount:25,unit:"ml"},{name:"Oyster sauce",amount:15,unit:"ml"},{name:"Garlic cloves",amount:3,unit:"whole"},{name:"Ginger",amount:15,unit:"g"},{name:"Sesame seeds",amount:10,unit:"g"}], instructions:"Stir-fry chicken until cooked. Add mushrooms, garlic, ginger, sauces. Serve over brown rice, sprinkle sesame seeds." },
+      { id:"d9-d",  day:9,  type:"dinner",    name:"Herb-Crusted Baked Cod",                  cuisine:"western", calories:360, protein:40, servings:2, cooked:false, ingredients:[{name:"Cod fillets",amount:400,unit:"g"},{name:"Wholegrain breadcrumbs",amount:40,unit:"g"},{name:"Parsley",amount:15,unit:"g"},{name:"Lemon zest",amount:5,unit:"g"},{name:"Garlic clove",amount:2,unit:"whole"},{name:"Olive oil",amount:15,unit:"ml"},{name:"Asparagus",amount:300,unit:"g"}], instructions:"Mix breadcrumbs, parsley, lemon zest, garlic, oil. Press onto cod. Bake with asparagus at 200°C for 15 min." },
+      { id:"d10-b", day:10, type:"breakfast", name:"Vietnamese Banh Mi Egg Sandwich",          cuisine:"asian",   calories:340, protein:26, servings:2, cooked:false, ingredients:[{name:"Wholegrain baguette",amount:200,unit:"g"},{name:"Eggs",amount:4,unit:"whole"},{name:"Pickled carrots & daikon",amount:80,unit:"g"},{name:"Cucumber",amount:80,unit:"g"},{name:"Coriander",amount:15,unit:"g"},{name:"Sriracha",amount:10,unit:"g"},{name:"Light mayo",amount:20,unit:"g"}], instructions:"Fry eggs to preference. Split baguette, spread mayo. Fill with fried eggs, pickled vegetables, cucumber, coriander, sriracha." },
+      { id:"d10-l", day:10, type:"lunch",     name:"Chicken Caesar Salad (Light)",             cuisine:"western", calories:390, protein:40, servings:2, cooked:false, ingredients:[{name:"Chicken breast (grilled)",amount:300,unit:"g"},{name:"Romaine lettuce",amount:200,unit:"g"},{name:"Parmesan (grated)",amount:30,unit:"g"},{name:"Wholegrain croutons",amount:40,unit:"g"},{name:"Greek yogurt (0% fat)",amount:80,unit:"g"},{name:"Lemon juice",amount:20,unit:"ml"},{name:"Garlic clove",amount:1,unit:"whole"},{name:"Anchovies",amount:4,unit:"whole"}], instructions:"Make dressing: blend yogurt, lemon, garlic, anchovies, mustard. Toss lettuce, sliced chicken, croutons with dressing. Top with parmesan." },
+      { id:"d10-d", day:10, type:"dinner",    name:"Thai Basil Minced Chicken (Pad Kra Pao)", cuisine:"asian",   calories:370, protein:38, servings:2, cooked:false, ingredients:[{name:"Minced chicken breast",amount:400,unit:"g"},{name:"Thai basil leaves",amount:30,unit:"g"},{name:"Red chili",amount:3,unit:"whole"},{name:"Garlic cloves",amount:5,unit:"whole"},{name:"Oyster sauce",amount:20,unit:"ml"},{name:"Fish sauce",amount:15,unit:"ml"},{name:"Cauliflower rice",amount:300,unit:"g"},{name:"Fried egg",amount:2,unit:"whole"}], instructions:"Stir-fry garlic and chili. Add chicken, cook through. Add sauces. Toss in basil leaves. Serve over cauliflower rice with fried egg on top." },
+      { id:"d11-b", day:11, type:"breakfast", name:"Smashed Avocado Toast with Poached Egg",  cuisine:"western", calories:340, protein:22, servings:2, cooked:false, ingredients:[{name:"Wholegrain bread",amount:4,unit:"slice"},{name:"Avocado",amount:2,unit:"whole"},{name:"Eggs",amount:4,unit:"whole"},{name:"Feta cheese",amount:40,unit:"g"},{name:"Chili flakes",amount:3,unit:"g"},{name:"Lemon juice",amount:15,unit:"ml"},{name:"Cherry tomatoes",amount:100,unit:"g"}], instructions:"Toast bread. Smash avocado with lemon juice and salt. Poach eggs 3 min. Spread avocado on toast, top with poached egg, feta, chili flakes, tomatoes." },
+      { id:"d11-l", day:11, type:"lunch",     name:"Japanese Soba Noodle Salad",              cuisine:"asian",   calories:360, protein:28, servings:2, cooked:false, ingredients:[{name:"Soba noodles",amount:200,unit:"g"},{name:"Edamame (shelled)",amount:150,unit:"g"},{name:"Cucumber",amount:150,unit:"g"},{name:"Carrot (julienned)",amount:100,unit:"g"},{name:"Sesame seeds",amount:15,unit:"g"},{name:"Soy sauce (low sodium)",amount:30,unit:"ml"},{name:"Rice vinegar",amount:20,unit:"ml"},{name:"Sesame oil",amount:10,unit:"ml"}], instructions:"Cook soba, rinse cold. Toss with all vegetables. Whisk soy, vinegar, sesame oil, ginger for dressing. Toss and top with sesame seeds." },
+      { id:"d11-d", day:11, type:"dinner",    name:"Baked Chicken Thighs with Roasted Veg",   cuisine:"western", calories:410, protein:44, servings:2, cooked:false, ingredients:[{name:"Chicken thighs (skinless)",amount:400,unit:"g"},{name:"Bell peppers",amount:200,unit:"g"},{name:"Zucchini",amount:200,unit:"g"},{name:"Red onion",amount:100,unit:"g"},{name:"Garlic cloves",amount:4,unit:"whole"},{name:"Olive oil",amount:20,unit:"ml"},{name:"Paprika",amount:8,unit:"g"},{name:"Thyme",amount:5,unit:"g"}], instructions:"Toss chicken with paprika, thyme, olive oil, garlic, lemon. Add vegetables to same tray. Roast at 200°C for 30-35 min until chicken is golden." },
+      { id:"d12-b", day:12, type:"breakfast", name:"Chinese Steamed Egg (Chawanmushi)",        cuisine:"asian",   calories:220, protein:20, servings:2, cooked:false, ingredients:[{name:"Eggs",amount:4,unit:"whole"},{name:"Dashi or chicken broth",amount:400,unit:"ml"},{name:"Soy sauce (low sodium)",amount:10,unit:"ml"},{name:"Mirin",amount:5,unit:"ml"},{name:"Prawns",amount:80,unit:"g"},{name:"Spring onions",amount:20,unit:"g"},{name:"Sesame oil",amount:3,unit:"ml"}], instructions:"Beat eggs with warm broth, soy, mirin. Strain into cups with prawns. Steam on low heat 12-15 min until just set. Top with spring onions and sesame oil." },
+      { id:"d12-l", day:12, type:"lunch",     name:"Beef & Barley Veggie Soup",               cuisine:"western", calories:350, protein:30, servings:2, cooked:false, ingredients:[{name:"Lean beef sirloin (cubed)",amount:250,unit:"g"},{name:"Pearl barley",amount:80,unit:"g"},{name:"Carrot",amount:150,unit:"g"},{name:"Celery",amount:100,unit:"g"},{name:"Onion",amount:100,unit:"g"},{name:"Garlic cloves",amount:3,unit:"whole"},{name:"Beef broth (low sodium)",amount:1000,unit:"ml"}], instructions:"Brown beef, add all veg and sauté. Add broth, barley, herbs. Simmer covered 40 min until barley is tender." },
+      { id:"d12-d", day:12, type:"dinner",    name:"Indonesian Ayam Bakar",                   cuisine:"asian",   calories:400, protein:42, servings:2, cooked:false, ingredients:[{name:"Chicken breasts",amount:400,unit:"g"},{name:"Kecap manis (sweet soy sauce)",amount:40,unit:"ml"},{name:"Garlic cloves",amount:4,unit:"whole"},{name:"Galangal or ginger",amount:20,unit:"g"},{name:"Lemongrass",amount:1,unit:"whole"},{name:"Turmeric",amount:5,unit:"g"},{name:"Coriander powder",amount:5,unit:"g"},{name:"Stir-fried bok choy",amount:300,unit:"g"}], instructions:"Blend marinade ingredients. Marinate chicken 30 min. Grill or pan-fry until caramelised. Serve with stir-fried bok choy." },
+      { id:"d13-b", day:13, type:"breakfast", name:"Protein Overnight Oats",                  cuisine:"western", calories:350, protein:28, servings:2, cooked:false, ingredients:[{name:"Rolled oats",amount:160,unit:"g"},{name:"Protein powder (vanilla)",amount:60,unit:"g"},{name:"Almond milk",amount:400,unit:"ml"},{name:"Chia seeds",amount:20,unit:"g"},{name:"Almond butter",amount:30,unit:"g"},{name:"Sliced banana",amount:1,unit:"whole"}], instructions:"Mix oats, protein powder, chia seeds, almond milk, cinnamon. Refrigerate overnight. Top with almond butter and banana to serve." },
+      { id:"d13-l", day:13, type:"lunch",     name:"Malaysian Tom Yum Chicken Soup",          cuisine:"asian",   calories:310, protein:34, servings:2, cooked:false, ingredients:[{name:"Chicken breast (sliced)",amount:300,unit:"g"},{name:"Tom yum paste",amount:30,unit:"g"},{name:"Coconut milk (light)",amount:100,unit:"ml"},{name:"Lemongrass",amount:2,unit:"whole"},{name:"Kaffir lime leaves",amount:4,unit:"whole"},{name:"Mushrooms",amount:150,unit:"g"},{name:"Cherry tomatoes",amount:100,unit:"g"},{name:"Lime juice",amount:30,unit:"ml"},{name:"Fish sauce",amount:15,unit:"ml"}], instructions:"Simmer broth with lemongrass, lime leaves, tom yum paste. Add chicken and mushrooms, cook 8 min. Add coconut milk, tomatoes, lime, fish sauce." },
+      { id:"d13-d", day:13, type:"dinner",    name:"Steak with Chimichurri & Cauliflower",    cuisine:"western", calories:450, protein:46, servings:2, cooked:false, ingredients:[{name:"Lean sirloin steak",amount:400,unit:"g"},{name:"Cauliflower",amount:400,unit:"g"},{name:"Fresh parsley",amount:30,unit:"g"},{name:"Garlic cloves",amount:4,unit:"whole"},{name:"Red wine vinegar",amount:20,unit:"ml"},{name:"Olive oil",amount:25,unit:"ml"},{name:"Oregano",amount:5,unit:"g"}], instructions:"Roast cauliflower florets at 220°C 20 min. Blend parsley, garlic, vinegar, olive oil, oregano for chimichurri. Sear steak 3-4 min each side." },
+      { id:"d14-b", day:14, type:"breakfast", name:"Taiwanese Dan Bing (Egg Crepe)",          cuisine:"asian",   calories:300, protein:22, servings:2, cooked:false, ingredients:[{name:"Eggs",amount:4,unit:"whole"},{name:"Flour",amount:80,unit:"g"},{name:"Water",amount:120,unit:"ml"},{name:"Soy sauce (low sodium)",amount:15,unit:"ml"},{name:"Spring onions",amount:30,unit:"g"},{name:"Sesame oil",amount:5,unit:"ml"}], instructions:"Mix flour and water into thin batter. Cook crepe in non-stick pan. Pour beaten egg on top, flip briefly. Drizzle soy sauce and sesame oil, add spring onions, roll up." },
+      { id:"d14-l", day:14, type:"lunch",     name:"Grilled Prawn Panzanella",                cuisine:"western", calories:360, protein:32, servings:2, cooked:false, ingredients:[{name:"Prawns (large)",amount:300,unit:"g"},{name:"Wholegrain bread (day-old)",amount:150,unit:"g"},{name:"Cherry tomatoes",amount:200,unit:"g"},{name:"Cucumber",amount:150,unit:"g"},{name:"Red onion",amount:80,unit:"g"},{name:"Basil leaves",amount:20,unit:"g"},{name:"Red wine vinegar",amount:20,unit:"ml"},{name:"Olive oil",amount:20,unit:"ml"}], instructions:"Grill prawns 2-3 min each side. Toast bread cubes in oven. Toss tomatoes, cucumber, onion, basil. Add bread and prawns, dress with vinegar and oil." },
+      { id:"d14-d", day:14, type:"dinner",    name:"Cantonese Steamed Fish with Ginger & Soy",cuisine:"asian",   calories:380, protein:44, servings:2, cooked:false, ingredients:[{name:"Whole sea bass or snapper",amount:600,unit:"g"},{name:"Ginger (julienned)",amount:40,unit:"g"},{name:"Spring onions",amount:40,unit:"g"},{name:"Soy sauce (low sodium)",amount:40,unit:"ml"},{name:"Sesame oil",amount:15,unit:"ml"},{name:"Cooking oil (for sizzle)",amount:20,unit:"ml"},{name:"Steamed bok choy",amount:300,unit:"g"}], instructions:"Score fish, steam 10-12 min. Top with ginger and spring onions. Pour hot soy sauce and sizzling oil over fish. Garnish with coriander. Serve with bok choy." },
+    ];
+
+    const MEAL_TYPES = ["breakfast","lunch","dinner"];
+    const MEAL_ICONS = { breakfast:"☀️", lunch:"🍱", dinner:"🌙" };
+    const DAY_NAMES  = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+    async function fetchNewMeals(slots, everCookedNames, currentNames) {
+      const avoid = [...new Set([...everCookedNames, ...currentNames])];
+      const slotsDesc = slots.map(s=>`${s.type} (Day ${s.day}, replace "${s.name}")`).join("; ");
+      const prompt = `You are a nutrition expert. Generate ${slots.length} replacement meal(s) for a high-protein, low-calorie plan for 2 people.\n\nSlots to fill: ${slotsDesc}\n\nNEVER use any of these dishes: ${avoid.join(", ")}\n\nRules per meal:\n- High protein 25-46g per serving\n- Low calorie 220-460 calories per serving\n- Easy to cook (under 40 min)\n- Mix of Western and Asian cuisines\n- Totally new dish\n\nRespond ONLY with a JSON array (no markdown, no backticks):\n[\n  {\n    "slotId": "<original id>",\n    "name": "Dish Name",\n    "cuisine": "western or asian",\n    "calories": 350,\n    "protein": 35,\n    "ingredients": [{"name":"ingredient","amount":200,"unit":"g"}],\n    "instructions": "2-3 sentence cooking instructions."\n  }\n]`;
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:2000, messages:[{role:"user",content:prompt}] })
+      });
+      const data = await res.json();
+      const text = data.content.map(i=>i.text||"").join("");
+      return JSON.parse(text.replace(/```json|```/g,"").trim());
+    }
+
+    // ── MAIN APP ───────────────────────────────────────────────────────────
+    function App() {
+      const [meals, setMeals]             = useState(SEED_MEALS);
+      const [everCooked, setEverCooked]   = useState([]);
+      const [activeWeek, setActiveWeek]   = useState(1);
+      const [expandedId, setExpandedId]   = useState(null);
+      const [editingKey, setEditingKey]   = useState(null);
+      const [view, setView]               = useState("grid");
+      const [loading, setLoading]         = useState(true);
+      const [refreshing, setRefreshing]   = useState(false);
+      const [notification, setNotif]      = useState(null);
+      const [showHistory, setShowHistory] = useState(false);
+      const [showConfirm, setShowConfirm] = useState(false);
+      const [refreshProgress, setRefreshProgress] = useState(null);
+
+      useEffect(()=>{
+        const saved = loadState();
+        if(saved){ setMeals(saved.meals||SEED_MEALS); setEverCooked(saved.everCooked||[]); }
+        setLoading(false);
+      },[]);
+
+      useEffect(()=>{ if(!loading) saveState({meals,everCooked}); },[meals,everCooked,loading]);
+
+      const notify = (msg,type="success")=>{ setNotif({msg,type}); setTimeout(()=>setNotif(null),3500); };
+
+      const weekDays = activeWeek===1?[1,2,3,4,5,6,7]:[8,9,10,11,12,13,14];
+
+      const toggleCooked = useCallback((id)=>{
+        setMeals(prev=>{
+          const meal=prev.find(m=>m.id===id); if(!meal) return prev;
+          const nowCooked=!meal.cooked;
+          const updated=prev.map(m=>m.id===id?{...m,cooked:nowCooked}:m);
+          if(nowCooked){
+            setEverCooked(ec=>[...new Set([...ec,meal.name])]);
+            notify(`✓ "${meal.name}" marked as cooked!`);
+            if(updated.filter(m=>m.cooked).length===updated.length) setShowConfirm(true);
+          }
+          return updated;
+        });
+      },[]);
+
+      const adjustServings=(mealId,newS)=>{
+        setMeals(prev=>prev.map(m=>{
+          if(m.id!==mealId) return m;
+          const ratio=newS/m.servings;
+          return{...m,servings:newS,calories:Math.round(m.calories*ratio),protein:Math.round(m.protein*ratio),
+            ingredients:m.ingredients.map(i=>({...i,amount:Math.round(i.amount*ratio*10)/10}))};
+        }));
+      };
+
+      const updateIngredient=(mealId,idx,field,val)=>{
+        setMeals(prev=>prev.map(m=>{
+          if(m.id!==mealId) return m;
+          const ings=[...m.ingredients];
+          ings[idx]={...ings[idx],[field]:field==="amount"?(parseFloat(val)||0):val};
+          return{...m,ingredients:ings};
+        }));
+      };
+
+      const regenOne=async(meal)=>{
+        setRefreshing(meal.id);
+        try{
+          const results=await fetchNewMeals([meal],everCooked,meals.map(m=>m.name));
+          const r=results[0];
+          setMeals(prev=>prev.map(m=>m.id===meal.id?{...m,...r,id:m.id,day:m.day,type:m.type,cooked:false,regenerated:true}:m));
+          notify(`🔄 Replaced with "${r.name}"!`);
+        }catch(e){ notify("Could not regenerate. Try again.","error"); }
+        finally{ setRefreshing(null); }
+      };
+
+      const fullRefresh=async()=>{
+        setShowConfirm(false); setRefreshing("ALL");
+        const BATCH=6; let newMeals=meals.map(m=>({...m,cooked:false})); const currentNames=[];
+        setRefreshProgress({done:0,total:42});
+        try{
+          for(let i=0;i<SEED_MEALS.length;i+=BATCH){
+            const batch=SEED_MEALS.slice(i,i+BATCH);
+            const results=await fetchNewMeals(batch,everCooked,currentNames);
+            results.forEach(r=>{ currentNames.push(r.name); newMeals=newMeals.map(m=>m.id===r.slotId?{...m,...r,id:m.id,day:m.day,type:m.type,cooked:false,regenerated:true}:m); });
+            setRefreshProgress({done:Math.min(i+BATCH,42),total:42}); setMeals([...newMeals]);
+          }
+          notify("🎉 Fresh new 14-day menu generated!");
+        }catch(e){ notify("Partial refresh done. Use ↺ for remaining.","error"); }
+        finally{ setRefreshing(null); setRefreshProgress(null); }
+      };
+
+      const totalCooked=meals.filter(m=>m.cooked).length;
+      const progress=Math.round((totalCooked/meals.length)*100);
+      const weekMeals=meals.filter(m=>weekDays.includes(m.day));
+      const weekCooked=weekMeals.filter(m=>m.cooked).length;
+
+      if(loading) return React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",fontFamily:"Georgia,serif",color:"#6b5a4e",fontSize:18,background:"#fdfaf5"}},"Loading your meal plan…");
+
+      return React.createElement("div",{style:{fontFamily:"'Playfair Display',Georgia,serif",minHeight:"100vh",background:"linear-gradient(135deg,#fdfaf5 0%,#f5f0e8 50%,#fdf8ef 100%)",color:"#2c2420",paddingBottom:20}},
+        React.createElement("style",null,`
+          @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Lato:wght@300;400;500;700&display=swap');
+          *{box-sizing:border-box;margin:0;padding:0}
+          .btn{cursor:pointer;border:none;transition:all .2s ease} .btn:hover{transform:translateY(-1px)} .btn:active{transform:translateY(0)}
+          .card{transition:all .3s ease;border-radius:16px;overflow:hidden} .card:hover{box-shadow:0 12px 40px rgba(44,36,32,.12)!important}
+          .cooked-card{opacity:.58}
+          input[type=number],input[type=text]{border:1.5px solid #d4c9b8;border-radius:8px;padding:4px 8px;font-family:'Lato',sans-serif;font-size:13px;outline:none} input:focus{border-color:#8b6914}
+          .slide-in{animation:si .3s ease} @keyframes si{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+          .notif{position:fixed;top:16px;right:16px;z-index:999;padding:12px 20px;border-radius:12px;font-family:'Lato',sans-serif;font-size:14px;font-weight:500;animation:si .3s ease;box-shadow:0 8px 32px rgba(0,0,0,.15)}
+          .spin{animation:spin 1s linear infinite;display:inline-block} @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+          .pb{transition:width .6s ease}
+          ::-webkit-scrollbar{width:5px} ::-webkit-scrollbar-thumb{background:#d4c9b8;border-radius:3px}
+          .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px}
+        `),
+        notification&&React.createElement("div",{className:"notif",style:{background:notification.type==="error"?"#fee2e2":"#d1ede5",color:notification.type==="error"?"#991b1b":"#2d6a55"}},notification.msg),
+        showConfirm&&React.createElement("div",{className:"overlay"},
+          React.createElement("div",{style:{background:"#fff",borderRadius:20,padding:28,maxWidth:340,width:"100%",textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.2)"}},
+            React.createElement("div",{style:{fontSize:40,marginBottom:12}},"🎉"),
+            React.createElement("h2",{style:{fontSize:22,marginBottom:8}},"All meals cooked!"),
+            React.createElement("p",{style:{fontFamily:"'Lato',sans-serif",fontSize:14,color:"#6b5a4e",lineHeight:1.6,marginBottom:20}},`Amazing! Ready for a brand-new menu? All ${everCooked.length} dishes you've cooked will be avoided.`),
+            React.createElement("div",{style:{display:"flex",gap:10}},
+              React.createElement("button",{className:"btn",onClick:()=>setShowConfirm(false),style:{flex:1,padding:"12px",borderRadius:12,background:"#f5f0e8",border:"1.5px solid #d4c9b8",fontFamily:"'Lato',sans-serif",fontWeight:600,fontSize:14,color:"#4a3428",cursor:"pointer"}},"Not Yet"),
+              React.createElement("button",{className:"btn",onClick:fullRefresh,style:{flex:1,padding:"12px",borderRadius:12,background:"#2c2420",border:"none",fontFamily:"'Lato',sans-serif",fontWeight:700,fontSize:14,color:"#fdf8ef",cursor:"pointer"}},"Fresh Menu!")
+            )
+          )
+        ),
+        refreshing==="ALL"&&React.createElement("div",{className:"overlay"},
+          React.createElement("div",{style:{background:"#fff",borderRadius:20,padding:32,maxWidth:320,width:"100%",textAlign:"center"}},
+            React.createElement("div",{style:{fontSize:40,marginBottom:12}},React.createElement("span",{className:"spin"},"🍳")),
+            React.createElement("h3",{style:{fontSize:18,marginBottom:8}},"Generating new menu…"),
+            React.createElement("p",{style:{fontFamily:"'Lato',sans-serif",fontSize:13,color:"#6b5a4e",marginBottom:16}},`Asking AI for 42 fresh dishes, avoiding all ${everCooked.length} dishes you've already cooked.`),
+            refreshProgress&&React.createElement(React.Fragment,null,
+              React.createElement("div",{style:{height:8,background:"#ede6d8",borderRadius:4,overflow:"hidden",marginBottom:6}},
+                React.createElement("div",{className:"pb",style:{height:"100%",width:`${(refreshProgress.done/refreshProgress.total)*100}%`,background:"linear-gradient(90deg,#4ecdc4,#44cf6c)",borderRadius:4}})
+              ),
+              React.createElement("p",{style:{fontFamily:"'Lato',sans-serif",fontSize:12,color:"#a09080"}},`${refreshProgress.done}/${refreshProgress.total} meals`)
+            )
+          )
+        ),
+        // Header
+        React.createElement("div",{style:{background:"linear-gradient(135deg,#2c2420 0%,#4a3428 60%,#3d2c20 100%)",color:"#fdf8ef",padding:"28px 20px 20px",textAlign:"center"}},
+          React.createElement("div",{style:{fontSize:11,letterSpacing:".25em",textTransform:"uppercase",color:"#c9a96e",fontFamily:"'Lato',sans-serif",fontWeight:700,marginBottom:6}},"14-Day High Protein Plan"),
+          React.createElement("h1",{style:{fontSize:"clamp(24px,6vw,38px)",fontWeight:700,letterSpacing:"-.02em",lineHeight:1.1,marginBottom:4}},"Mum's Meal Planner"),
+          React.createElement("p",{style:{fontSize:13,color:"#c9a96e",fontFamily:"'Lato',sans-serif",marginBottom:16}},"For 2 people · Western & Asian · High protein · Low calorie"),
+          React.createElement("div",{style:{maxWidth:340,margin:"0 auto",background:"rgba(255,255,255,.08)",borderRadius:14,padding:"14px 18px"}},
+            React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,fontFamily:"'Lato',sans-serif"}},
+              React.createElement("span",{style:{fontSize:12,color:"#c9a96e"}},"Overall progress"),
+              React.createElement("span",{style:{fontSize:14,fontWeight:700,color:"#f5c842"}},`${totalCooked}/${meals.length}`)
+            ),
+            React.createElement("div",{style:{height:7,background:"rgba(255,255,255,.15)",borderRadius:4,overflow:"hidden"}},
+              React.createElement("div",{className:"pb",style:{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#4ecdc4,#44cf6c)",borderRadius:4}})
+            ),
+            React.createElement("div",{style:{textAlign:"right",fontSize:11,color:"#a09080",marginTop:3,fontFamily:"'Lato',sans-serif"}},`${progress}% complete`)
+          )
+        ),
+        // Controls
+        React.createElement("div",{style:{padding:"14px 14px 0",maxWidth:860,margin:"0 auto"}},
+          React.createElement("div",{style:{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"space-between",alignItems:"center"}},
+            React.createElement("div",{style:{display:"flex",gap:6,background:"#ede6d8",borderRadius:12,padding:4}},
+              [1,2].map(w=>React.createElement("button",{key:w,className:"btn",onClick:()=>setActiveWeek(w),style:{padding:"7px 20px",borderRadius:9,border:"none",fontFamily:"'Lato',sans-serif",fontWeight:600,fontSize:13,background:activeWeek===w?"#2c2420":"transparent",color:activeWeek===w?"#fdf8ef":"#6b5a4e",cursor:"pointer"}},`Week ${w}`))
+            ),
+            React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+              React.createElement("button",{onClick:()=>setView(v=>v==="grid"?"list":"grid"),className:"btn",style:{padding:"7px 14px",borderRadius:10,background:"#ede6d8",border:"none",fontSize:12,fontFamily:"'Lato',sans-serif",fontWeight:600,color:"#4a3428",cursor:"pointer"}},view==="grid"?"📋 List":"📅 Grid"),
+              React.createElement("button",{onClick:()=>setShowHistory(h=>!h),className:"btn",style:{padding:"7px 14px",borderRadius:10,background:"#ede6d8",border:"none",fontSize:12,fontFamily:"'Lato',sans-serif",fontWeight:600,color:"#4a3428",cursor:"pointer"}},`📚 History${everCooked.length>0?" ("+everCooked.length+")":""}`),
+              React.createElement("button",{onClick:()=>setShowConfirm(true),className:"btn",style:{padding:"7px 14px",borderRadius:10,background:"#2c2420",border:"none",fontSize:12,fontFamily:"'Lato',sans-serif",fontWeight:700,color:"#fdf8ef",cursor:"pointer"}},"✨ New Menu")
+            )
+          ),
+          React.createElement("div",{style:{marginTop:10,padding:"9px 14px",background:"#fff8ee",borderRadius:12,border:"1px solid #ede6d8",display:"flex",gap:12,alignItems:"center",fontFamily:"'Lato',sans-serif"}},
+            React.createElement("span",{style:{fontSize:12,color:"#6b5a4e"}},`Week ${activeWeek}:`),
+            React.createElement("div",{style:{flex:1,height:5,background:"#ede6d8",borderRadius:3,overflow:"hidden"}},
+              React.createElement("div",{className:"pb",style:{height:"100%",width:`${(weekCooked/weekMeals.length)*100}%`,background:"linear-gradient(90deg,#e8926c,#f5c842)",borderRadius:3}})
+            ),
+            React.createElement("span",{style:{fontSize:12,fontWeight:600,color:"#4a3428"}},`${weekCooked}/${weekMeals.length}`)
+          ),
+          showHistory&&React.createElement("div",{className:"slide-in",style:{marginTop:10,background:"#fff",borderRadius:14,border:"1.5px solid #ede6d8",padding:14}},
+            React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
+              React.createElement("span",{style:{fontWeight:700,fontSize:14}},`📚 Cooked History (${everCooked.length} dishes)`),
+              everCooked.length>0&&React.createElement("button",{className:"btn",onClick:()=>{setEverCooked([]);notify("History cleared.");},style:{fontSize:11,fontFamily:"'Lato',sans-serif",color:"#c0392b",background:"none",border:"none",cursor:"pointer",fontWeight:600}},"Clear")
+            ),
+            everCooked.length===0
+              ? React.createElement("p",{style:{fontFamily:"'Lato',sans-serif",fontSize:13,color:"#a09080"}},"No dishes cooked yet. Start cooking!")
+              : React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+                  everCooked.map((n,i)=>React.createElement("span",{key:i,style:{background:"#d1ede5",color:"#2d6a55",fontSize:11,padding:"3px 10px",borderRadius:8,fontFamily:"'Lato',sans-serif",fontWeight:600}},`✓ ${n}`))
+                ),
+            React.createElement("p",{style:{fontFamily:"'Lato',sans-serif",fontSize:11,color:"#a09080",marginTop:8}},"AI avoids all these when generating a new menu.")
+          )
+        ),
+        // Meal grid/list
+        React.createElement("div",{style:{padding:"14px",maxWidth:860,margin:"0 auto"}},
+          view==="grid"
+            ? weekDays.map(day=>React.createElement(DayRow,{key:day,day,meals,expandedId,setExpandedId,toggleCooked,regenOne,refreshing,updateIngredient,adjustServings,editingKey,setEditingKey}))
+            : React.createElement(ListView,{meals,weekDays,expandedId,setExpandedId,toggleCooked,regenOne,refreshing,updateIngredient,adjustServings,editingKey,setEditingKey})
+        ),
+        React.createElement("div",{style:{textAlign:"center",padding:"16px",color:"#a09080",fontSize:11,fontFamily:"'Lato',sans-serif"}},"Progress auto-saved · Tap meal to expand · History avoids repeats forever")
+      );
+    }
+
+    function DayRow({day,meals,...rest}){
+      const dayMeals=meals.filter(m=>m.day===day);
+      const label=DAY_NAMES[(day-1)%7];
+      const allDone=dayMeals.every(m=>m.cooked);
+      return React.createElement("div",{style:{marginBottom:18}},
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
+          React.createElement("div",{style:{background:allDone?"#2d6a55":"#2c2420",color:allDone?"#d1ede5":"#fdf8ef",borderRadius:10,padding:"3px 12px",fontFamily:"'Lato',sans-serif",fontWeight:700,fontSize:12,minWidth:86,textAlign:"center"}},`${allDone?"✓ ":""}${label} · D${day}`),
+          React.createElement("div",{style:{flex:1,height:1,background:"#ede6d8"}})
+        ),
+        React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(250px,1fr))",gap:10}},
+          MEAL_TYPES.map(t=>{ const m=dayMeals.find(x=>x.type===t); return m?React.createElement(MealCard,{key:m.id,meal:m,...rest}):null; })
+        )
+      );
+    }
+
+    function ListView({meals,weekDays,...rest}){
+      return React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6}},
+        MEAL_TYPES.map(type=>React.createElement("div",{key:type},
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,margin:"14px 0 8px"}},
+            React.createElement("div",{style:{background:"#2c2420",color:"#fdf8ef",padding:"3px 14px",borderRadius:10,fontSize:12,fontFamily:"'Lato',sans-serif",fontWeight:700}},`${MEAL_ICONS[type]} ${type.charAt(0).toUpperCase()+type.slice(1)}`),
+            React.createElement("div",{style:{flex:1,height:1,background:"#ede6d8"}})
+          ),
+          weekDays.map(day=>{
+            const m=meals.find(x=>x.day===day&&x.type===type); if(!m) return null;
+            const dl=DAY_NAMES[(day-1)%7];
+            return React.createElement("div",{key:m.id,style:{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}},
+              React.createElement("div",{style:{minWidth:46,paddingTop:13,textAlign:"center",fontFamily:"'Lato',sans-serif",fontSize:11,fontWeight:700,color:"#a09080"}},
+                React.createElement("div",null,dl),React.createElement("div",{style:{color:"#c9a96e",fontSize:10}},`D${day}`)
+              ),
+              React.createElement("div",{style:{flex:1}},React.createElement(MealCard,{meal:m,...rest}))
+            );
+          })
+        ))
+      );
+    }
+
+    function MealCard({meal,expandedId,setExpandedId,toggleCooked,regenOne,refreshing,updateIngredient,adjustServings,editingKey,setEditingKey}){
+      const isExp=expandedId===meal.id, isRegen=refreshing===meal.id;
+      const badge=meal.cuisine==="western"?{bg:"#d1ede5",c:"#2d6a55"}:{bg:"#fde8c8",c:"#8b4513"};
+      return React.createElement("div",{className:`card ${meal.cooked?"cooked-card":""}`,style:{background:"#fff",border:`1.5px solid ${meal.cooked?"#a8d5c5":"#ede6d8"}`,boxShadow:"0 4px 18px rgba(44,36,32,.06)",position:"relative"}},
+        meal.regenerated&&!meal.cooked&&React.createElement("div",{style:{position:"absolute",top:7,right:7,background:"#e8f4ff",color:"#2563eb",fontSize:9,padding:"2px 7px",borderRadius:5,fontFamily:"'Lato',sans-serif",fontWeight:700,zIndex:1}},"AI NEW"),
+        React.createElement("div",{onClick:()=>setExpandedId(isExp?null:meal.id),style:{padding:"12px 14px 8px",cursor:"pointer"}},
+          React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}},
+            React.createElement("div",{style:{display:"flex",gap:5,alignItems:"center"}},
+              React.createElement("span",{style:{fontSize:14}},MEAL_ICONS[meal.type]),
+              React.createElement("span",{style:{fontSize:10,textTransform:"uppercase",letterSpacing:".12em",color:"#a09080",fontFamily:"'Lato',sans-serif",fontWeight:700}},meal.type)
+            ),
+            React.createElement("div",{style:{display:"flex",gap:4,alignItems:"center"}},
+              React.createElement("span",{style:{background:badge.bg,color:badge.c,fontSize:9,padding:"2px 7px",borderRadius:5,fontFamily:"'Lato',sans-serif",fontWeight:700}},meal.cuisine==="western"?"🍴 Western":"🥢 Asian"),
+              React.createElement("span",{style:{fontSize:12,color:"#a09080",marginLeft:3}},isExp?"▲":"▼")
+            )
+          ),
+          React.createElement("h3",{style:{fontSize:"clamp(13px,2.5vw,15px)",fontWeight:600,lineHeight:1.3,marginBottom:6,color:meal.cooked?"#6b8b7a":"#2c2420",textDecoration:meal.cooked?"line-through":"none"}},meal.name),
+          React.createElement("div",{style:{display:"flex",gap:10,fontFamily:"'Lato',sans-serif",fontSize:11}},
+            React.createElement("span",{style:{color:"#e8926c",fontWeight:700}},`🔥 ${meal.calories} cal`),
+            React.createElement("span",{style:{color:"#2d6a55",fontWeight:700}},`💪 ${meal.protein}g`),
+            React.createElement("span",{style:{color:"#a09080"}},`👥 ${meal.servings}`)
+          )
+        ),
+        React.createElement("div",{style:{padding:"0 14px 12px",display:"flex",gap:8}},
+          React.createElement("button",{className:"btn",onClick:()=>toggleCooked(meal.id),style:{flex:1,padding:"6px 0",borderRadius:10,background:meal.cooked?"#2d6a55":"#f5f0e8",border:`1.5px solid ${meal.cooked?"#2d6a55":"#d4c9b8"}`,color:meal.cooked?"#fff":"#4a3428",fontFamily:"'Lato',sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}},meal.cooked?"✓ Cooked!":"Mark Cooked"),
+          React.createElement("button",{className:"btn",onClick:()=>regenOne(meal),disabled:isRegen||refreshing==="ALL",style:{padding:"6px 11px",borderRadius:10,background:isRegen?"#e8e0d8":"#fff8ee",border:"1.5px solid #d4c9b8",color:"#8b6914",fontFamily:"'Lato',sans-serif",fontSize:12,fontWeight:600,cursor:"pointer"}},isRegen?React.createElement("span",{className:"spin"},"⟳"):"↺")
+        ),
+        isExp&&React.createElement("div",{className:"slide-in",style:{borderTop:"1px solid #ede6d8",padding:14}},
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:12,fontFamily:"'Lato',sans-serif"}},
+            React.createElement("span",{style:{fontSize:12,color:"#6b5a4e",fontWeight:600}},"Servings:"),
+            [1,2,3,4].map(n=>React.createElement("button",{key:n,className:"btn",onClick:()=>adjustServings(meal.id,n),style:{width:28,height:28,borderRadius:7,background:meal.servings===n?"#2c2420":"#f5f0e8",border:`1.5px solid ${meal.servings===n?"#2c2420":"#d4c9b8"}`,color:meal.servings===n?"#fff":"#4a3428",fontSize:12,fontWeight:600,cursor:"pointer"}},n))
+          ),
+          React.createElement("div",{style:{marginBottom:12}},
+            React.createElement("div",{style:{fontSize:11,fontFamily:"'Lato',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"#8b6914",marginBottom:6}},"Ingredients"),
+            meal.ingredients.map((ing,i)=>{
+              const ek=`${meal.id}-${i}`, isE=editingKey===ek;
+              return React.createElement("div",{key:i,onClick:()=>setEditingKey(isE?null:ek),style:{display:"flex",alignItems:"center",gap:6,padding:"4px 5px",borderRadius:7,cursor:"pointer",marginBottom:1,background:isE?"#fdfaf5":"transparent"}},
+                React.createElement("span",{style:{fontSize:12,flex:1,fontFamily:"'Lato',sans-serif",color:"#3a2e28"}},ing.name),
+                isE
+                  ? React.createElement("div",{style:{display:"flex",gap:4},onClick:e=>e.stopPropagation()},
+                      React.createElement("input",{type:"number",value:ing.amount,onChange:e=>updateIngredient(meal.id,i,"amount",e.target.value),style:{width:58}}),
+                      React.createElement("input",{type:"text",value:ing.unit||"",onChange:e=>updateIngredient(meal.id,i,"unit",e.target.value),style:{width:40}})
+                    )
+                  : React.createElement("span",{style:{fontSize:11,fontFamily:"'Lato',sans-serif",fontWeight:600,color:"#6b5a4e",background:"#f5f0e8",padding:"2px 7px",borderRadius:5}},`${ing.amount}${ing.unit?" "+ing.unit:""}`)
+              );
+            }),
+            React.createElement("p",{style:{fontSize:10,color:"#a09080",fontFamily:"'Lato',sans-serif",marginTop:4}},"Tap ingredient to edit")
+          ),
+          React.createElement("div",{style:{fontSize:11,fontFamily:"'Lato',sans-serif",fontWeight:700,textTransform:"uppercase",letterSpacing:".1em",color:"#8b6914",marginBottom:6}},"Instructions"),
+          React.createElement("p",{style:{fontSize:12,fontFamily:"'Lato',sans-serif",lineHeight:1.65,color:"#4a3428",background:"#fdfaf5",padding:"9px 11px",borderRadius:9}},meal.instructions)
+        )
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+
+    // Register service worker
+    if("serviceWorker" in navigator){
+      window.addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").then(()=>console.log("SW registered")).catch(()=>{}));
+    }
+  </script>
+</body>
+</html>
